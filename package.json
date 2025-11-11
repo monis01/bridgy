@@ -1,0 +1,25 @@
+{
+  "name": "bridgy",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsup src/index.ts --format cjs,esm,iife --global-name Bridger --dts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/monis01/bridgy.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/monis01/bridgy/issues"
+  },
+  "homepage": "https://github.com/monis01/bridgy#readme",
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3"
+  }
+}
