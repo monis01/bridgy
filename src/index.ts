@@ -1,2 +1,2 @@
-export * from './bridge';
+export * from './channel';
 export * from './types';
