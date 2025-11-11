@@ -4,17 +4,33 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "",
-  "main": "index.js",
+  "description": "Lightweight universal iframe bridge for cross-app messaging (Angular, React, Vue, etc.)",
+  "keywords": [
+    "iframe",
+    "bridge",
+    "messaging",
+    "postMessage",
+    "cross-domain",
+    "typescript"
+  ],
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsup src/index.ts --format cjs,esm,iife --global-name Bridger --dts --minify --sourcemap"
+    "build": "tsup src/index.ts --format cjs,esm,iife --global-name Bridger --dts --minify --sourcemap",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/monis01/bridgy.git"
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
