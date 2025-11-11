@@ -1,5 +1,5 @@
 {
-  "name": "@mo/iframe-bridge",
+  "name": "@monis01/iframe-bridge",
   "version": "1.0.0",
   "publishConfig": {
     "access": "public"
