@@ -1,6 +1,20 @@
-# Bridgy
+<p align="center">
+  <img src="logo.svg" alt="Bridgy Logo" width="400"/>
+</p>
 
-Lightweight, secure iframe communication library for cross-origin messaging.
+<h1 align="center">Bridgy</h1>
+
+<p align="center">
+  Lightweight, secure iframe communication library for cross-origin messaging.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/size-6.3kb-blue" alt="Size"/>
+  <img src="https://img.shields.io/badge/typescript-ready-brightgreen" alt="TypeScript"/>
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License"/>
+</p>
+
+---
 
 ## Features
 
