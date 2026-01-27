@@ -1,19 +1,11 @@
-// Message type constant
-export const BRIDGE_MESSAGE_TYPE = 'BRIDGER_MESSAGE_V0';
+export const BRIDGE_MESSAGE_TYPE = 'bridgy-message';
 
-// Roles
-export const MODES = {
-  SENDER: 'sender',
-  RECEIVER: 'receiver',
-  DUPLEX: 'duplex',
+export const MSG_TYPES = {
+    SYN: 'SYN',
+    SYN_ACK: 'SYN_ACK',
+    ACK: 'ACK',
+    DATA: 'DATA',
+    RESPONSE: 'RESPONSE'
 } as const;
 
-export const DEFAULT_VERSION = '0.1.0';
-
-// Command constants
-export const COMMANDS = {
-  INIT: 'init',
-  ACK: 'ack',
-  REFRESH: 'refresh',
-  UPDATE: 'update',
-} as const;
+export const DEFAULT_TIMEOUT = 10000;
