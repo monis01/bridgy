@@ -1,120 +1,244 @@
-# CLAUDE.md - Project Instructions for Claude Opus
+# CLAUDE.md - Project Context for Claude
 
 ## Project Overview
 
-**Bridgy** (`@monis01/iframe-bridge`) is a lightweight, framework-agnostic TypeScript library that provides a universal iframe bridge for secure cross-window messaging. It enables seamless communication between parent windows and embedded iframes, supporting one-way and bidirectional messaging patterns.
+**Bridgy** (`@monis01/iframe-bridge`) is a lightweight, framework-agnostic TypeScript library for secure cross-origin iframe communication.
 
-- **Package Name:** `@monis01/iframe-bridge`
+- **Package:** `@monis01/iframe-bridge`
 - **Repository:** https://github.com/monis01/bridgy
-- **Current Version:** 1.1.3
+- **Bundle Size:** ~6.31 KB (IIFE)
 
-## Tech Stack
+## Core Principles
 
-- **Language:** TypeScript 5.9.3
-- **Bundler:** tsup 8.5.0
-- **Output Formats:** CommonJS, ES Modules, IIFE (UMD)
-- **Runtime Dependency:** uuidv4 6.2.13
+### What This Library Does
+- Secure communication between parent window and child iframe
+- 3-way handshake for connection establishment
+- Fire-and-forget messaging, event subscription, request-response patterns
+- Works with any framework (Angular, React, Vue, vanilla JS)
 
-## Project Structure
+### Design Decisions
 
+| Decision | Chosen | Why |
+|----------|--------|-----|
+| Single class vs Parent/Child | **Single `Bridgy` class** | No code duplication, simpler API |
+| Auto-connect vs explicit | **Auto-connect** | Industry standard, less boilerplate |
+| Role detection | **Explicit `role` param** | Nested iframes (Parent→Child1→Child2) need explicit roles |
+| Origins config | **Array** | Parent: whitelist multiple origins. Child: uses first |
+| Message queueing | **Yes** | Non-blocking, no callback hell |
+
+## Architecture
+
+### File Structure
 ```
-bridgy/
-├── src/
-│   ├── index.ts        # Main entry point and public exports
-│   ├── bridger.ts      # Core Bridger class (factory & registry)
-│   ├── channel.ts      # Channel class (messaging implementation)
-│   ├── types.ts        # TypeScript interfaces and type definitions
-│   ├── constants.ts    # Message types and default values
-│   └── utils.ts        # Utility functions (ID generation, origin validation)
-├── dist/               # Build output (generated)
-├── package.json
-├── tsconfig.json
-└── .github/workflows/  # CI/CD for npm publishing
-```
+src/
+├── index.ts      (16 lines)   - Exports
+├── bridge.ts     (290 lines)  - Main Bridgy class
+├── types.ts      (76 lines)   - TypeScript interfaces
+├── constants.ts  (9 lines)    - Default values
+├── logger.ts     (37 lines)   - Debug logger
+└── utils.ts      (10 lines)   - Helpers
 
-## Key Components
-
-### Bridger Class (`bridger.ts`)
-Static factory and registry class that manages Channel instances:
-- `Bridger.act(mode, config)` - Create and register a new channel
-- `Bridger.get(instanceId)` - Retrieve existing channel by ID
-- `Bridger.remove(instanceId)` - Unregister and cleanup a channel
-- `Bridger.listInstanceIds()` - List all active channel IDs
-
-### Channel Class (`channel.ts`)
-Core messaging engine handling window communication:
-- **Modes:** `sender` | `receiver` | `duplex`
-- **Methods:** `send()`, `on()`, `off()`, `offAll()`, `getInstanceId()`
-- Uses `window.postMessage()` API internally
-- Supports origin whitelisting for security
-
-### Types (`types.ts`)
-- `BridgeMode` - Communication mode union type
-- `ChannelConfig` - Channel configuration interface
-- `PublicChannelAPI` - Public API interface
-- `MessagePacket` - Internal message structure
-
-### Constants (`constants.ts`)
-- `BRIDGE_MESSAGE_TYPE` - Message identifier ('bridgy-message')
-- `MSG_TYPES` - Message type constants (SYN, SYN_ACK, ACK, DATA, RESPONSE)
-- `DEFAULT_TIMEOUT` - Default timeout value (10000ms)
-
-## Build Commands
-
-```bash
-npm run build    # Build all formats (CJS, ESM, IIFE) with minification
-npm publish      # Publish to npm registry
+Total: ~438 lines
 ```
 
-## Development Workflow
+### Handshake Flow
+```
+Child (role: 'child')              Parent (role: 'parent')
+        |                                    |
+        |----------- SYN ------------------>|
+        |<---------- SYN_ACK ---------------|
+        |----------- ACK ------------------>|
+        |========== CONNECTED ==============|
+```
 
-1. **Main Branch (`main`):** Production-ready code, triggers npm publish via CI/CD
-2. **Dev Branch (`dev`):** Active development branch
-3. **Build Output:** `dist/` directory contains compiled files
-
-## Code Conventions
-
-- **Strict TypeScript:** Project uses strict mode (`strict: true` in tsconfig)
-- **Export Pattern:** Single entry point (`src/index.ts`) exports Bridger class and types
-- **Registry Pattern:** Bridger uses Map-based registry to track channels
-- **Handler Pattern:** Command-based event handlers with Set for multiple listeners
-
-## API Usage Example
-
+### Packet Structure
 ```typescript
-// Parent window (sender)
-const api = Bridger.act('sender', { instanceId: 'my-channel' });
-api.send('theme-change', { theme: 'dark' });
+interface BridgePacket {
+  __bridgy: true;        // Marker to identify our messages
+  type: PacketType;      // SYN, SYN_ACK, ACK, DATA, REQUEST, RESPONSE
+  id: string;            // Unique packet ID
+  timestamp: number;
+  command?: string;      // For DATA/REQUEST
+  payload?: unknown;     // Message data
+  replyTo?: string;      // For RESPONSE (correlation)
+  error?: string;        // For error responses
+}
+```
 
-// Child iframe (receiver)
-const api = Bridger.act('receiver', {
-  instanceId: 'my-channel',
-  allowedOrigins: ['https://parent.com']
-});
-api.on('theme-change', (payload) => console.log(payload));
+## Patterns (DO)
 
-// Bidirectional (duplex)
-const api = Bridger.act('duplex', {
-  instanceId: 'my-channel',
-  allowedOrigins: ['*']
+### 1. Single Class with Role
+```typescript
+// Parent
+const bridge = new Bridgy({ role: 'parent', origins: ['https://child.com'] });
+
+// Child
+const bridge = new Bridgy({ role: 'child', origins: ['https://parent.com'] });
+```
+
+### 2. Non-blocking Usage
+```typescript
+const bridge = new Bridgy({ role: 'parent', origins: ['*'] });
+
+// These work immediately - queued until connected
+bridge.send('event', { data: 'value' });
+bridge.on('response', handler);
+
+// Optional: handle connection status
+bridge.ready().then(...).catch(...);
+```
+
+### 3. Request-Response
+```typescript
+// Requester
+const result = await bridge.request('get-data', { id: 1 });
+
+// Handler
+bridge.handle('get-data', async (payload) => {
+  return await fetchData(payload.id);
 });
 ```
 
-## Important Notes
+### 4. Angular Service Pattern
+```typescript
+@Injectable({ providedIn: 'root' })
+export class BridgeService {
+  private bridge = new Bridgy({ role: 'parent', origins: [...] });
 
-- Always validate origins in production (avoid `'*'` except for development)
-- Each channel requires a unique `instanceId`
-- Multiple handlers can be registered for the same command
-- Use `off()` or `offAll()` for cleanup to prevent memory leaks
-- The library is framework-agnostic and works with Angular, React, Vue, or vanilla JS
+  send(cmd: string, data: any) { this.bridge.send(cmd, data); }
+  on(cmd: string, handler: Function) { this.bridge.on(cmd, handler); }
+}
+```
 
-## Testing
+## Anti-Patterns (DON'T)
 
-Currently no test framework is configured. When adding tests:
-- Consider using Vitest or Jest
-- Mock `window.postMessage` and message events
-- Test all three bridge modes (sender, receiver, duplex)
+### 1. ❌ Separate Parent/Child Classes
+```typescript
+// DON'T - duplicates code
+class Parent { ... }
+class Child { ... }
 
-## CI/CD
+// DO - single class with role
+class Bridgy { constructor({ role }) { ... } }
+```
 
-GitHub Actions workflow (`.github/workflows/publish.yml`) automatically publishes to npm when changes are pushed to the `main` branch.
+### 2. ❌ Callback Hell
+```typescript
+// DON'T
+bridge.onReady(() => {
+  bridge.send(...);
+  bridge.on(..., () => {
+    // nested...
+  });
+});
+
+// DO - message queueing handles this
+bridge.send(...);  // Works immediately, queued if not connected
+bridge.on(...);
+```
+
+### 3. ❌ Over-Engineering
+```typescript
+// DON'T - too many abstractions
+interface Logger { ... }
+interface HandshakeController { ... }
+interface PacketFactory { ... }
+class SynPacket extends BasePacket { ... }
+class SynAckPacket extends BasePacket { ... }
+
+// DO - simple, direct
+function createPacket(type) { return { __bridgy: true, type, ... }; }
+```
+
+### 4. ❌ Multiple Type Definitions
+```typescript
+// DON'T - 7 separate packet interfaces
+interface SynPacket { type: 'SYN'; ... }
+interface SynAckPacket { type: 'SYN_ACK'; ... }
+// ...
+
+// DO - single flexible interface
+interface BridgePacket {
+  type: PacketType;
+  command?: string;
+  payload?: unknown;
+  // ...
+}
+```
+
+### 5. ❌ Excessive Defensive Checks
+```typescript
+// DON'T
+private assertConnected() { ... }
+private assertCanSend() { ... }
+private assertCanReceive() { ... }
+private assertNotDestroyed() { ... }
+
+// DO - simple inline checks
+if (this.state !== 'connected' || !this.canSend()) return;
+```
+
+## API Reference
+
+### Constructor
+```typescript
+new Bridgy({
+  role: 'parent' | 'child',  // Required
+  origins: string[],          // Required
+  mode?: 'duplex' | 'push' | 'pull',  // Default: 'duplex'
+  debug?: boolean,            // Default: false
+  timeout?: number            // Default: 10000
+})
+```
+
+### Methods
+| Method | Description |
+|--------|-------------|
+| `send(cmd, payload?)` | Fire-and-forget |
+| `on(cmd, handler)` | Subscribe to events |
+| `off(cmd?, handler?)` | Unsubscribe |
+| `request(cmd, payload?)` | Returns Promise |
+| `handle(cmd, handler)` | Register request handler |
+| `removeHandler(cmd)` | Remove handler |
+| `ready()` | Promise for connection |
+| `onReady(callback)` | Callback for connection |
+| `isConnected()` | Boolean |
+| `getState()` | ConnectionState |
+| `enableDebug()` | Turn on logging |
+| `disableDebug()` | Turn off logging |
+| `destroy()` | Cleanup |
+
+## Build & Distribution
+
+### Build Command
+```bash
+npm run build
+```
+
+### Output
+```
+dist/
+├── index.js          (CJS)     - 6.33 KB
+├── index.mjs         (ESM)     - 5.85 KB
+├── index.global.js   (IIFE)    - 6.31 KB  ← For CDN/S3
+├── index.d.ts        (Types)   - 3.74 KB
+└── *.map             (Sourcemaps)
+```
+
+### Usage
+```typescript
+// npm (TypeScript/bundlers)
+import { Bridgy } from '@monis01/iframe-bridge';
+
+// Script tag (browser)
+<script src="bridgy.min.js"></script>
+new Bridger.Bridgy({ ... });
+```
+
+## Key Learnings
+
+1. **Keep it simple** - A library should be easy to understand and maintain
+2. **No premature abstraction** - Don't create interfaces/factories until needed
+3. **Single responsibility** - One class doing one thing well
+4. **Message queueing** - Eliminates timing issues and callback hell
+5. **Explicit over magic** - User specifies role, no auto-detection for edge cases
