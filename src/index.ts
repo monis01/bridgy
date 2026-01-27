@@ -2,16 +2,11 @@
 // BRIDGY
 // =============================================================================
 
-// Main classes
-export { Parent } from './parent';
-export { Child } from './child';
+export { Bridgy, type BridgyConfig } from './bridge';
 
-// Types
 export type {
   BridgeMode,
   ConnectionState,
-  ParentConfig,
-  ChildConfig,
   BridgeAPI,
   BridgePacket,
   EventHandler,
