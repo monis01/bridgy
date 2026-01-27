@@ -1,64 +1,37 @@
 // =============================================================================
-// LOGGER MODULE
-// =============================================================================
-// Provides debug logging functionality for the bridge.
-// Can be enabled/disabled at runtime.
+// BRIDGY LOGGER
 // =============================================================================
 
-import type { Logger } from './types';
+const PREFIX = '[Bridgy]';
 
-const LOG_PREFIX = '[Bridgy]';
-
-/**
- * Create a logger instance
- * @param context - Context label (e.g., 'Host', 'Guest')
- * @param enabled - Initial enabled state
- */
-export function createLogger(context: string, enabled: boolean = false): Logger {
+export function createLogger(context: string, enabled = false) {
   let isEnabled = enabled;
-  const prefix = `${LOG_PREFIX}:${context}`;
-
-  const formatData = (data?: unknown): string => {
-    if (data === undefined) return '';
-    try {
-      return JSON.stringify(data);
-    } catch {
-      return String(data);
-    }
-  };
 
   return {
-    log(direction: 'send' | 'recv', packetType: string, data?: unknown): void {
+    log(direction: 'send' | 'recv', type: string, data?: unknown) {
       if (!isEnabled) return;
       const arrow = direction === 'send' ? '→' : '←';
-      console.log(`${prefix} ${arrow} ${packetType}`, data ?? '');
+      console.log(`${PREFIX}:${context} ${arrow} ${type}`, data ?? '');
     },
 
-    info(message: string, data?: unknown): void {
+    info(msg: string) {
       if (!isEnabled) return;
-      console.log(`${prefix} ℹ ${message}`, data !== undefined ? formatData(data) : '');
+      console.log(`${PREFIX}:${context}`, msg);
     },
 
-    warn(message: string, data?: unknown): void {
+    warn(msg: string) {
       if (!isEnabled) return;
-      console.warn(`${prefix} ⚠ ${message}`, data !== undefined ? formatData(data) : '');
+      console.warn(`${PREFIX}:${context}`, msg);
     },
 
-    error(message: string, data?: unknown): void {
-      // Errors are always logged, regardless of debug state
-      console.error(`${prefix} ✖ ${message}`, data !== undefined ? formatData(data) : '');
+    error(msg: string) {
+      console.error(`${PREFIX}:${context}`, msg);
     },
 
-    enable(): void {
-      isEnabled = true;
-    },
-
-    disable(): void {
-      isEnabled = false;
-    },
-
-    isEnabled(): boolean {
-      return isEnabled;
-    },
+    enable() { isEnabled = true; },
+    disable() { isEnabled = false; },
+    isEnabled() { return isEnabled; },
   };
 }
+
+export type Logger = ReturnType<typeof createLogger>;

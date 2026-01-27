@@ -1,35 +1,21 @@
 // =============================================================================
-// BRIDGY - Main Entry Point
+// BRIDGY
 // =============================================================================
 
-// Legacy exports (to be deprecated)
-export { Bridger } from './bridger';
+// Main classes
+export { Parent } from './parent';
+export { Child } from './child';
 
-// New type exports
+// Types
 export type {
   BridgeMode,
   ConnectionState,
-  BaseBridgeConfig,
-  HostConfig,
-  GuestConfig,
+  ParentConfig,
+  ChildConfig,
   BridgeAPI,
+  BridgePacket,
   EventHandler,
   RequestHandler,
-  ReadyCallback,
-  BridgePacket,
-  DataPacket,
-  RequestPacket,
-  ResponsePacket,
 } from './types';
 
-// Type guard
 export { isBridgePacket } from './types';
-
-// Host class (parent window)
-export { Host } from './host';
-
-// Guest class (child iframe)
-export { Guest } from './guest';
-
-// Constants
-export { PACKET_TYPES, BRIDGE_MODES, DEFAULTS } from './constants';
