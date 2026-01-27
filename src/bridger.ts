@@ -1,5 +1,4 @@
 import { Channel, type BridgeMode, type ChannelConfig, type PublicChannelAPI } from "./channel";
-import type { ActOptions, BridgerPublic } from "./types";
 
 const registry = new Map<string, Channel>();
 
