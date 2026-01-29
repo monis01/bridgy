@@ -22,7 +22,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest",
     "build": "tsup src/index.ts --format cjs,esm,iife --global-name Bridger --dts --minify --sourcemap",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
@@ -38,8 +38,10 @@
   },
   "homepage": "https://github.com/monis01/bridgy#readme",
   "devDependencies": {
+    "jsdom": "^27.4.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "uuidv4": "^6.2.13"

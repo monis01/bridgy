@@ -48,6 +48,12 @@ export type RequestHandler<TReq = unknown, TRes = unknown> = (
   event: MessageEvent
 ) => TRes | Promise<TRes>;
 
+/** Request options */
+export interface RequestOptions {
+  /** Override default timeout (in ms) */
+  timeout?: number;
+}
+
 /** Public API interface */
 export interface BridgeAPI {
   ready(): Promise<void>;
@@ -57,7 +63,7 @@ export interface BridgeAPI {
   send<T = unknown>(command: string, payload?: T): void;
   on<T = unknown>(command: string, handler: EventHandler<T>): void;
   off(command?: string, handler?: EventHandler): void;
-  request<TReq = unknown, TRes = unknown>(command: string, payload?: TReq, timeout?: number): Promise<TRes>;
+  request<TReq = unknown, TRes = unknown>(command: string, payload?: TReq, options?: RequestOptions): Promise<TRes>;
   handle<TReq = unknown, TRes = unknown>(command: string, handler: RequestHandler<TReq, TRes>): void;
   removeHandler(command: string): void;
   enableDebug(): void;

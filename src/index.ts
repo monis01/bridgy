@@ -11,6 +11,7 @@ export type {
   BridgePacket,
   EventHandler,
   RequestHandler,
+  RequestOptions,
 } from './types';
 
 export { isBridgePacket } from './types';

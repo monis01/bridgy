@@ -8,6 +8,7 @@ import type {
   BridgePacket,
   EventHandler,
   RequestHandler,
+  RequestOptions,
   BridgeAPI,
 } from './types';
 import { isBridgePacket } from './types';
@@ -135,10 +136,11 @@ export class Bridgy implements BridgeAPI {
   }
 
   // Parent waits: wait for SYN → send SYN_ACK → wait for ACK
+  // Note: Parent waits indefinitely - no timeout. This allows initializing
+  // the bridge before the iframe exists (e.g., on app load).
   private waitForHandshake() {
     this.state = 'connecting';
     this.logger.info('Waiting for child...');
-    let timeoutId: ReturnType<typeof setTimeout>;
 
     const handler = (event: MessageEvent) => {
       if (!isOriginAllowed(event.origin, this.origins)) return;
@@ -159,18 +161,11 @@ export class Bridgy implements BridgeAPI {
       if (packet.type === 'ACK' && this.targetWindow) {
         this.logger.log('recv', 'ACK', {});
         window.removeEventListener('message', handler);
-        clearTimeout(timeoutId);
         this.onConnected();
       }
     };
 
     window.addEventListener('message', handler);
-
-    timeoutId = setTimeout(() => {
-      window.removeEventListener('message', handler);
-      this.state = 'disconnected';
-      this.readyReject(new Error('Handshake timeout'));
-    }, this.timeout);
   }
 
   private onConnected() {
@@ -309,7 +304,7 @@ export class Bridgy implements BridgeAPI {
   }
 
   /** Request-response. Returns promise. */
-  request<TReq, TRes>(command: string, payload?: TReq, timeout?: number): Promise<TRes> {
+  request<TReq, TRes>(command: string, payload?: TReq, options?: RequestOptions): Promise<TRes> {
     return new Promise((resolve, reject) => {
       if (!this.canSend()) { reject(new Error('Mode does not allow sending')); return; }
 
@@ -317,7 +312,7 @@ export class Bridgy implements BridgeAPI {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error(`Timeout: ${command}`));
-      }, timeout ?? this.timeout);
+      }, options?.timeout ?? this.timeout);
 
       this.pendingRequests.set(id, { resolve, reject, timer });
       this.sendPacket({ __bridgy: true, type: 'REQUEST', id, timestamp: Date.now(), command, payload });
