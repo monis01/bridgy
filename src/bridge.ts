@@ -29,8 +29,14 @@ export interface BridgyConfig {
   mode?: BridgeMode;
   /** Enable debug logging */
   debug?: boolean;
-  /** Handshake timeout in ms */
+  /** Request timeout in ms (does not apply to handshake) */
   timeout?: number;
+  /** Auto-connect on instantiation (default: true) */
+  autoConnect?: boolean;
+  /** Number of SYN retries for child (default: 5) */
+  retries?: number;
+  /** Interval between SYN retries in ms (default: 2000) */
+  retryInterval?: number;
 }
 
 // =============================================================================
@@ -42,12 +48,16 @@ export class Bridgy implements BridgeAPI {
   private readonly origins: string[];
   private readonly mode: BridgeMode;
   private readonly timeout: number;
+  private readonly retries: number;
+  private readonly retryInterval: number;
   private readonly logger: Logger;
 
   private state: ConnectionState = 'disconnected';
   private targetWindow: Window | null = null;
   private targetOrigin: string | null = null;
   private messageHandler: ((e: MessageEvent) => void) | null = null;
+  private retryTimer: ReturnType<typeof setInterval> | null = null;
+  private handshakeHandler: ((e: MessageEvent) => void) | null = null;
 
   private readonly eventHandlers = new Map<string, Set<EventHandler>>();
   private readonly requestHandlers = new Map<string, RequestHandler>();
@@ -66,6 +76,8 @@ export class Bridgy implements BridgeAPI {
     this.origins = config.origins;
     this.mode = (config.mode ?? DEFAULTS.MODE) as BridgeMode;
     this.timeout = config.timeout ?? DEFAULTS.TIMEOUT;
+    this.retries = config.retries ?? DEFAULTS.RETRIES;
+    this.retryInterval = config.retryInterval ?? DEFAULTS.RETRY_INTERVAL;
     this.logger = createLogger(config.role, config.debug ?? DEFAULTS.DEBUG);
 
     this.readyPromise = new Promise((res, rej) => {
@@ -73,32 +85,42 @@ export class Bridgy implements BridgeAPI {
       this.readyReject = rej;
     });
 
-    this.connect();
+    if (config.autoConnect ?? DEFAULTS.AUTO_CONNECT) {
+      this.connect();
+    }
   }
 
   // ===========================================================================
   // CONNECTION
   // ===========================================================================
 
-  private connect() {
+  /** Connect to the other side. Returns a promise that resolves when connected. */
+  connect(): Promise<void> {
+    if (this.state !== 'disconnected') {
+      return this.readyPromise;
+    }
+
     if (this.role === 'child') {
       const parent = window.parent;
       if (!parent || parent === window) {
         this.readyReject(new Error('No parent window - must run in iframe'));
-        return;
+        return this.readyPromise;
       }
       this.targetWindow = parent;
       this.initiateHandshake();
     } else {
       this.waitForHandshake();
     }
+
+    return this.readyPromise;
   }
 
   // Child initiates: SYN → wait for SYN_ACK → send ACK
+  // Retries SYN up to `retries` times with `retryInterval` between attempts.
   private initiateHandshake() {
     this.state = 'connecting';
     const targetOrigin = this.origins[0] || '*';
-    let timeoutId: ReturnType<typeof setTimeout>;
+    let attempts = 0;
 
     const handler = (event: MessageEvent) => {
       if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
@@ -107,6 +129,12 @@ export class Bridgy implements BridgeAPI {
       if (event.data.type === 'SYN_ACK') {
         this.logger.log('recv', 'SYN_ACK', {});
 
+        // Stop retrying
+        if (this.retryTimer) {
+          clearInterval(this.retryTimer);
+          this.retryTimer = null;
+        }
+
         // Send ACK
         this.targetOrigin = event.origin;
         this.sendRaw({ __bridgy: true, type: 'ACK', id: makeId('ack'), timestamp: Date.now() });
@@ -114,25 +142,47 @@ export class Bridgy implements BridgeAPI {
 
         // Connected
         window.removeEventListener('message', handler);
-        clearTimeout(timeoutId);
+        this.handshakeHandler = null;
         this.onConnected();
       }
     };
 
+    this.handshakeHandler = handler;
     window.addEventListener('message', handler);
 
-    // Send SYN
-    this.logger.log('send', 'SYN', {});
-    this.targetWindow!.postMessage(
-      { __bridgy: true, type: 'SYN', id: makeId('syn'), timestamp: Date.now() },
-      targetOrigin
-    );
+    // Send initial SYN
+    const sendSyn = () => {
+      this.logger.log('send', 'SYN', { attempt: attempts + 1 });
+      this.targetWindow!.postMessage(
+        { __bridgy: true, type: 'SYN', id: makeId('syn'), timestamp: Date.now() },
+        targetOrigin
+      );
+    };
 
-    timeoutId = setTimeout(() => {
-      window.removeEventListener('message', handler);
-      this.state = 'disconnected';
-      this.readyReject(new Error('Handshake timeout'));
-    }, this.timeout);
+    sendSyn();
+    attempts++;
+
+    // Retry SYN periodically until connected or max retries reached
+    this.retryTimer = setInterval(() => {
+      if (this.state === 'connected') {
+        clearInterval(this.retryTimer!);
+        this.retryTimer = null;
+        return;
+      }
+
+      attempts++;
+      if (attempts > this.retries) {
+        clearInterval(this.retryTimer!);
+        this.retryTimer = null;
+        window.removeEventListener('message', handler);
+        this.handshakeHandler = null;
+        this.state = 'disconnected';
+        this.readyReject(new Error(`Connection failed after ${this.retries} attempts`));
+        return;
+      }
+
+      sendSyn();
+    }, this.retryInterval);
   }
 
   // Parent waits: wait for SYN → send SYN_ACK → wait for ACK
@@ -331,7 +381,21 @@ export class Bridgy implements BridgeAPI {
   disableDebug() { this.logger.disable(); }
 
   destroy() {
-    if (this.messageHandler) window.removeEventListener('message', this.messageHandler);
+    // Clean up retry timer
+    if (this.retryTimer) {
+      clearInterval(this.retryTimer);
+      this.retryTimer = null;
+    }
+    // Clean up handshake handler
+    if (this.handshakeHandler) {
+      window.removeEventListener('message', this.handshakeHandler);
+      this.handshakeHandler = null;
+    }
+    // Clean up message handler
+    if (this.messageHandler) {
+      window.removeEventListener('message', this.messageHandler);
+      this.messageHandler = null;
+    }
     this.eventHandlers.clear();
     this.requestHandlers.clear();
     this.pendingRequests.forEach(p => { clearTimeout(p.timer); p.reject(new Error('Destroyed')); });

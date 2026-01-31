@@ -56,6 +56,7 @@ export interface RequestOptions {
 
 /** Public API interface */
 export interface BridgeAPI {
+  connect(): Promise<void>;
   ready(): Promise<void>;
   onReady(callback: () => void): void;
   isConnected(): boolean;
