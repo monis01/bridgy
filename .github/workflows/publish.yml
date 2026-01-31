@@ -3,7 +3,7 @@ name: Build & Publish
 on:
   push:
     branches:
-      - main
+      - development
 
 jobs:
   build-and-publish:
