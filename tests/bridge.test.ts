@@ -132,7 +132,7 @@ describe('Bridgy', () => {
 //   });
 // });
 
-describe("Connection (Child)", () => {
+describe('Connection (Child)', () => {
   let bridge: Bridgy;
 
   beforeEach(() => {
@@ -141,17 +141,17 @@ describe("Connection (Child)", () => {
       origins: ['http://localhost:3000'],
       autoConnect: false,
     });
-  })
+  });
   afterEach(() => {
     if (bridge) {
       bridge.destroy();
     }
   });
-  
+
   it('rejects with error when not in iframe (window.parent === window)', async () => {
     // In jsdom, window.parent === window, so child role should fail
     await expect(bridge.connect()).rejects.toThrow('No parent window - must run in iframe');
-    expect(bridge.isConnected()).toBeFalsy()
+    expect(bridge.isConnected()).toBeFalsy();
   });
 
   it('sends SYN packet on connect', () => {
@@ -168,7 +168,7 @@ describe("Connection (Child)", () => {
         __bridgy: true,
         type: 'SYN',
       }),
-      'http://localhost:3000'
+      'http://localhost:3000',
     );
 
     vi.unstubAllGlobals();
@@ -176,6 +176,6 @@ describe("Connection (Child)", () => {
 
 });
 
-describe("Connection (Parent)", () => {
+describe('Connection (Parent)', () => {
   it.todo('waits for SYN from child');
-})
+});

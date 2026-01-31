@@ -155,7 +155,7 @@ export class Bridgy implements BridgeAPI {
       this.logger.log('send', 'SYN', { attempt: attempts + 1 });
       this.targetWindow!.postMessage(
         { __bridgy: true, type: 'SYN', id: makeId('syn'), timestamp: Date.now() },
-        targetOrigin
+        targetOrigin,
       );
     };
 
@@ -271,7 +271,7 @@ export class Bridgy implements BridgeAPI {
   private async handleRequest(packet: BridgePacket, event: MessageEvent) {
     const handler = this.requestHandlers.get(packet.command!);
     const response: BridgePacket = {
-      __bridgy: true, type: 'RESPONSE', id: makeId('res'), timestamp: Date.now(), replyTo: packet.id
+      __bridgy: true, type: 'RESPONSE', id: makeId('res'), timestamp: Date.now(), replyTo: packet.id,
     };
 
     if (!handler) {
