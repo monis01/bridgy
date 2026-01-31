@@ -110,7 +110,10 @@ new Bridgy(config: BridgyConfig)
 | `origins` | `string[]` | Yes | Allowed origins (parent) or target origin (child) |
 | `mode` | `'duplex' \| 'push' \| 'pull'` | No | Communication mode (default: `'duplex'`) |
 | `debug` | `boolean` | No | Enable debug logging (default: `false`) |
-| `timeout` | `number` | No | Handshake timeout in ms (default: `10000`) |
+| `timeout` | `number` | No | Request timeout in ms (default: `10000`) |
+| `autoConnect` | `boolean` | No | Auto-connect on instantiation (default: `true`) |
+| `retries` | `number` | No | SYN retry attempts for child (default: `5`) |
+| `retryInterval` | `number` | No | Interval between retries in ms (default: `2000`) |
 
 ### Methods
 
@@ -118,6 +121,7 @@ new Bridgy(config: BridgyConfig)
 
 | Method | Returns | Description |
 |--------|---------|-------------|
+| `connect()` | `Promise<void>` | Manually initiate connection (use with `autoConnect: false`) |
 | `ready()` | `Promise<void>` | Resolves when connected |
 | `onReady(callback)` | `void` | Callback when connected |
 | `isConnected()` | `boolean` | Check connection status |
@@ -171,6 +175,32 @@ Child                              Parent
   |----------- ACK ---------------->|  Child confirms
   |                                  |
   |========== CONNECTED ============|
+```
+
+## Manual Connection
+
+By default, Bridgy connects automatically on instantiation. Use `autoConnect: false` for manual control:
+
+```typescript
+const bridge = new Bridgy({
+  role: 'child',
+  origins: ['https://parent-app.com'],
+  autoConnect: false,  // Don't connect immediately
+  retries: 3,          // Retry SYN 3 times
+  retryInterval: 1000  // 1 second between retries
+});
+
+// Set up handlers before connecting
+bridge.on('config', (data) => applyConfig(data));
+bridge.handle('get-status', () => ({ ready: true }));
+
+// Connect when ready
+try {
+  await bridge.connect();
+  console.log('Connected!');
+} catch (err) {
+  console.error('Connection failed:', err.message);
+}
 ```
 
 ## Message Patterns
