@@ -1,40 +1,83 @@
-import { BRIDGE_MESSAGE_TYPE, MODES } from "./constants";
+// =============================================================================
+// BRIDGY TYPES
+// =============================================================================
 
-export type Mode = (typeof MODES)[keyof typeof MODES];
-export interface ActOptions {
-  mode: Mode;
-  // for senders: where to post (parent origin)
-  toOrigin?: string;
-  // for receivers: allowed origins for incoming messages
-  fromOrigins?: string[]; // whitelist, '*' allowed for dev
-  // optional friendly id; auto-generated if absent
-  instanceId?: string;
-  // version of your bridge library/consumer
-  version?: string;
-}
-export interface BridgeMessage {
-  type: typeof BRIDGE_MESSAGE_TYPE;
-  command: string;
-  payload?: any;
-  messageId: string;
-  senderId: string;
-  targetId?: string; // optional
-  timestamp: number; // ms
-  version?: string;
-  // permissions or other meta can be added later
-}
+/** Communication mode */
+export type BridgeMode = 'duplex' | 'push' | 'pull';
 
-export type OnHandler = (payload: any, meta: BridgeMessage, ev?: MessageEvent) => void;
+/** Connection state */
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
-export interface BridgerPublic {
-  // send a command (allowed if mode supports it)
-  send(command: string, payload?: any, targetId?: string): void;
-  // register a listener for a command
-  on(command: string, handler: OnHandler): void;
-  // remove previously registered listener
-  off(command: string, handler?: OnHandler): void;
-  // returns instance id for tracing
-  getInstanceId(): string;
+/** Packet types */
+export type PacketType = 'SYN' | 'SYN_ACK' | 'ACK' | 'DATA' | 'REQUEST' | 'RESPONSE';
+
+/** Universal packet structure */
+export interface BridgePacket {
+  __bridgy: true;
+  type: PacketType;
+  id: string;
+  timestamp: number;
+  command?: string;
+  payload?: unknown;
+  replyTo?: string;
+  error?: string;
 }
 
+/** Parent (Host) configuration */
+export interface ParentConfig {
+  allowedOrigins: string[];
+  mode?: BridgeMode;
+  debug?: boolean;
+  timeout?: number;
+}
 
+/** Child (Guest) configuration */
+export interface ChildConfig {
+  targetOrigin: string;
+  mode?: BridgeMode;
+  debug?: boolean;
+  timeout?: number;
+}
+
+/** Event handler */
+export type EventHandler<T = unknown> = (payload: T, event: MessageEvent) => void;
+
+/** Request handler */
+export type RequestHandler<TReq = unknown, TRes = unknown> = (
+  payload: TReq,
+  event: MessageEvent
+) => TRes | Promise<TRes>;
+
+/** Request options */
+export interface RequestOptions {
+  /** Override default timeout (in ms) */
+  timeout?: number;
+}
+
+/** Public API interface */
+export interface BridgeAPI {
+  connect(): Promise<void>;
+  ready(): Promise<void>;
+  onReady(callback: () => void): void;
+  isConnected(): boolean;
+  getState(): ConnectionState;
+  send<T = unknown>(command: string, payload?: T): void;
+  on<T = unknown>(command: string, handler: EventHandler<T>): void;
+  off(command?: string, handler?: EventHandler): void;
+  request<TReq = unknown, TRes = unknown>(command: string, payload?: TReq, options?: RequestOptions): Promise<TRes>;
+  handle<TReq = unknown, TRes = unknown>(command: string, handler: RequestHandler<TReq, TRes>): void;
+  removeHandler(command: string): void;
+  enableDebug(): void;
+  disableDebug(): void;
+  destroy(): void;
+}
+
+/** Type guard for packets */
+export function isBridgePacket(data: unknown): data is BridgePacket {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    '__bridgy' in data &&
+    (data as BridgePacket).__bridgy === true
+  );
+}
