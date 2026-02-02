@@ -37,6 +37,8 @@ export interface BridgyConfig {
   retries?: number;
   /** Interval between SYN retries in ms (default: 2000) */
   retryInterval?: number;
+  /** Skip handshake and connect immediately (default: false). Use when parent uses raw postMessage. */
+  skipHandshake?: boolean;
 }
 
 // =============================================================================
@@ -50,6 +52,7 @@ export class Bridgy implements BridgeAPI {
   private readonly timeout: number;
   private readonly retries: number;
   private readonly retryInterval: number;
+  private readonly skipHandshake: boolean;
   private readonly logger: Logger;
 
   private state: ConnectionState = 'disconnected';
@@ -78,6 +81,7 @@ export class Bridgy implements BridgeAPI {
     this.timeout = config.timeout ?? DEFAULTS.TIMEOUT;
     this.retries = config.retries ?? DEFAULTS.RETRIES;
     this.retryInterval = config.retryInterval ?? DEFAULTS.RETRY_INTERVAL;
+    this.skipHandshake = config.skipHandshake ?? false;
     this.logger = createLogger(config.role, config.debug ?? DEFAULTS.DEBUG);
 
     this.readyPromise = new Promise((res, rej) => {
@@ -107,7 +111,15 @@ export class Bridgy implements BridgeAPI {
         return this.readyPromise;
       }
       this.targetWindow = parent;
-      this.initiateHandshake();
+
+      if (this.skipHandshake) {
+        // Skip handshake - assume parent is ready, connect immediately
+        this.targetOrigin = this.origins[0] || '*';
+        this.logger.info('Skipping handshake, connecting immediately');
+        this.onConnected();
+      } else {
+        this.initiateHandshake();
+      }
     } else {
       this.waitForHandshake();
     }
@@ -211,10 +223,12 @@ export class Bridgy implements BridgeAPI {
       if (packet.type === 'ACK' && this.targetWindow) {
         this.logger.log('recv', 'ACK', {});
         window.removeEventListener('message', handler);
+        this.handshakeHandler = null;
         this.onConnected();
       }
     };
 
+    this.handshakeHandler = handler;
     window.addEventListener('message', handler);
   }
 

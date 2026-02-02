@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/size-6.3kb-blue" alt="Size"/>
+  <img src="https://img.shields.io/badge/size-~7kb-blue" alt="Size"/>
   <img src="https://img.shields.io/badge/typescript-ready-brightgreen" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License"/>
 </p>
@@ -20,13 +20,14 @@
 
 - **Single Class API** - One `Bridgy` class for both parent and child
 - **Secure Handshake** - 3-way handshake (SYN → SYN_ACK → ACK) before communication
+- **Skip Handshake Mode** - Optional instant connection for raw postMessage parents
 - **Origin Validation** - Whitelist allowed origins for security
 - **Message Queueing** - Messages sent before connection are queued automatically
 - **Non-blocking** - No callback hell, connection happens in background
 - **Multiple Patterns** - Fire-and-forget, event subscription, request-response
 - **Debug Mode** - Built-in logging with runtime toggle
 - **TypeScript** - Full type support
-- **Lightweight** - ~6KB minified
+- **Lightweight** - ~7KB minified
 
 ## Installation
 
@@ -34,9 +35,9 @@
 npm install @monis01/iframe-bridge
 ```
 
-Or via CDN:
+Or via script tag:
 ```html
-<script src="https://cdn.example.com/bridgy.min.js"></script>
+<script src="path/to/index.global.js"></script>
 ```
 
 ## Quick Start
@@ -114,6 +115,7 @@ new Bridgy(config: BridgyConfig)
 | `autoConnect` | `boolean` | No | Auto-connect on instantiation (default: `true`) |
 | `retries` | `number` | No | SYN retry attempts for child (default: `5`) |
 | `retryInterval` | `number` | No | Interval between retries in ms (default: `2000`) |
+| `skipHandshake` | `boolean` | No | Skip handshake, connect immediately (default: `false`) |
 
 ### Methods
 
@@ -203,6 +205,51 @@ try {
 }
 ```
 
+## Skip Handshake Mode
+
+When the parent application uses raw `postMessage` instead of Bridgy, use `skipHandshake: true` to bypass the 3-way handshake:
+
+```typescript
+const bridge = new Bridgy({
+  role: 'child',
+  origins: ['*'],
+  skipHandshake: true,   // Skip handshake, assume parent is ready
+  autoConnect: false
+});
+
+// Connect immediately - no waiting for parent response
+await bridge.connect();
+
+// Send messages immediately
+bridge.send('child-ready', { status: 'initialized' });
+
+// Request-response still works if parent sends proper response format
+const token = await bridge.request('getToken', { userId: 123 });
+```
+
+**When to use `skipHandshake: true`:**
+- Parent uses raw `window.postMessage()` instead of Bridgy
+- You want instant connection without handshake overhead
+- Parent application is guaranteed to be ready
+
+**Parent (raw postMessage) must respond to requests with this format:**
+```javascript
+// Parent handling request from Bridgy child
+window.addEventListener('message', (event) => {
+  const packet = event.data;
+
+  if (packet?.__bridgy && packet.type === 'REQUEST') {
+    // Send response with matching replyTo
+    event.source.postMessage({
+      __bridgy: true,
+      type: 'RESPONSE',
+      replyTo: packet.id,        // Must match request ID
+      payload: { token: 'xyz' }  // Your response data
+    }, event.origin);
+  }
+});
+```
+
 ## Message Patterns
 
 ### Fire-and-Forget
@@ -244,11 +291,19 @@ bridge.handle('fetch-data', async (payload) => {
 ### Script Tag (Vanilla JS)
 
 ```html
-<script src="bridgy.min.js"></script>
+<script src="path/to/index.global.js"></script>
 <script>
-  const bridge = new Bridger.Bridgy({
-    role: 'parent',
-    origins: ['*']
+  // Access via global Bridger object
+  var bridge = new Bridger.Bridgy({
+    role: 'child',
+    origins: ['*'],
+    skipHandshake: true,
+    autoConnect: false
+  });
+
+  // Connect and use
+  bridge.connect().then(function() {
+    bridge.send('ready', { status: 'connected' });
   });
 </script>
 ```
@@ -257,22 +312,53 @@ bridge.handle('fetch-data', async (payload) => {
 
 ```typescript
 // bridge.service.ts
-import { Injectable } from '@angular/core';
+import { Injectable, OnDestroy } from '@angular/core';
 import { Bridgy } from '@monis01/iframe-bridge';
 
 @Injectable({ providedIn: 'root' })
-export class BridgeService {
-  private bridge = new Bridgy({
-    role: 'parent',
-    origins: ['https://child-app.com']
-  });
+export class BridgeService implements OnDestroy {
+  private bridge: Bridgy;
 
-  send(command: string, data: any) {
-    this.bridge.send(command, data);
+  constructor() {
+    this.bridge = new Bridgy({
+      role: 'child',
+      origins: ['*'],
+      skipHandshake: true,
+      autoConnect: false
+    });
   }
 
-  onMessage(command: string, handler: (data: any) => void) {
-    this.bridge.on(command, handler);
+  // Expose instance for direct access to standard methods
+  get instance(): Bridgy {
+    return this.bridge;
+  }
+
+  // Custom connect that registers handlers after connection
+  async connect(): Promise<void> {
+    await this.bridge.connect();
+    this.registerHandlers();
+  }
+
+  private registerHandlers(): void {
+    this.bridge.handle('get-status', () => ({ ready: true }));
+  }
+
+  ngOnDestroy(): void {
+    this.bridge.destroy();
+  }
+}
+
+// Usage in component
+@Component({ ... })
+export class MyComponent {
+  constructor(private bridgeService: BridgeService) {}
+
+  async ngOnInit() {
+    await this.bridgeService.connect();
+
+    // Use instance directly for standard operations
+    this.bridgeService.instance.send('ready', { timestamp: Date.now() });
+    this.bridgeService.instance.on('config', (data) => this.applyConfig(data));
   }
 }
 ```
@@ -300,23 +386,21 @@ export function useBridge(config: BridgyConfig) {
 
 | Format | File | Size |
 |--------|------|------|
-| IIFE (CDN) | `dist/index.global.js` | **6.31 KB** |
-| ESM | `dist/index.mjs` | **5.85 KB** |
-| CJS | `dist/index.js` | **6.33 KB** |
-| Types | `dist/index.d.ts` | **3.74 KB** |
+| IIFE (CDN) | `dist/index.global.js` | **~7.3 KB** |
+| ESM | `dist/index.js` | **~6.8 KB** |
+| CJS | `dist/index.cjs` | **~7.3 KB** |
+| Types | `dist/index.d.ts` | **~4.6 KB** |
 
 ## File Structure
 
 ```
 src/
-├── index.ts      (16 lines)   - Exports
-├── bridge.ts     (290 lines)  - Main Bridgy class
-├── types.ts      (76 lines)   - TypeScript interfaces
-├── constants.ts  (9 lines)    - Default values
-├── logger.ts     (37 lines)   - Debug logger
-└── utils.ts      (10 lines)   - Helpers
-
-Total: ~438 lines
+├── index.ts      - Exports
+├── bridge.ts     - Main Bridgy class
+├── types.ts      - TypeScript interfaces
+├── constants.ts  - Default values
+├── logger.ts     - Debug logger
+└── utils.ts      - Helpers
 ```
 
 ## Browser Support
