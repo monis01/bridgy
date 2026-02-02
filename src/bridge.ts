@@ -223,10 +223,12 @@ export class Bridgy implements BridgeAPI {
       if (packet.type === 'ACK' && this.targetWindow) {
         this.logger.log('recv', 'ACK', {});
         window.removeEventListener('message', handler);
+        this.handshakeHandler = null;
         this.onConnected();
       }
     };
 
+    this.handshakeHandler = handler;
     window.addEventListener('message', handler);
   }
 
