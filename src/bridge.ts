@@ -242,8 +242,25 @@ export class Bridgy implements BridgeAPI {
 
   private listen() {
     this.messageHandler = (event: MessageEvent) => {
-      if (!this.isValidOrigin(event.origin)) return;
-      if (!isBridgePacket(event.data)) return;
+      // Debug: log ALL incoming messages
+      this.logger.log('recv', 'RAW_EVENT', { origin: event.origin, hasData: !!event.data, isBridgy: isBridgePacket(event.data) });
+
+      if (!this.isValidOrigin(event.origin)) {
+        this.logger.log('recv', 'BLOCKED_ORIGIN', { origin: event.origin, allowed: this.origins });
+        return;
+      }
+
+      // When skipHandshake is enabled, accept both Bridgy packets and raw messages
+      if (this.skipHandshake && !isBridgePacket(event.data)) {
+        this.handleRawMessage(event);
+        return;
+      }
+
+      if (!isBridgePacket(event.data)) {
+        this.logger.log('recv', 'BLOCKED_NOT_BRIDGY', { data: event.data });
+        return;
+      }
+
       this.handlePacket(event.data, event);
     };
     window.addEventListener('message', this.messageHandler);
@@ -259,6 +276,30 @@ export class Bridgy implements BridgeAPI {
   // ===========================================================================
   // MESSAGE HANDLING
   // ===========================================================================
+
+  private handleRawMessage(event: MessageEvent) {
+    if (!this.canReceive()) return;
+
+    const data = event.data;
+
+    // Try to extract command name from message data
+    // Support common patterns: data.command, data.type, data.event
+    let command: string | undefined;
+
+    if (typeof data === 'object' && data !== null) {
+      command = data.command || data.type || data.event;
+    }
+
+    if (command && typeof command === 'string') {
+      // Trigger specific command handler
+      this.logger.log('recv', 'RAW', { command });
+      this.eventHandlers.get(command)?.forEach(h => h(data, event));
+    } else {
+      // No command found - trigger wildcard 'message' handler
+      this.logger.log('recv', 'RAW', { command: '*' });
+      this.eventHandlers.get('message')?.forEach(h => h(data, event));
+    }
+  }
 
   private handlePacket(packet: BridgePacket, event: MessageEvent) {
     if (packet.type === 'DATA' && this.canReceive()) {
