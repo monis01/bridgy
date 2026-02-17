@@ -4,6 +4,8 @@
 
 import type { EventHandler, RequestHandler } from './types';
 import { makeId, isOriginAllowed } from './utils';
+import { BridgyLog } from './bridgy-log';
+import type { LogEntry } from './bridgy-log';
 
 // =============================================================================
 // CONFIG
@@ -14,10 +16,14 @@ export interface BridgyLiteConfig {
   role: 'parent' | 'child';
   /** Allowed origins */
   origins: string[];
-  /** Enable debug logging */
+  /** Label for identifying this instance in logs (default: 'Bridgy') */
+  label?: string;
+  /** Enable debug logging (default: false) */
   debug?: boolean;
   /** Request timeout in ms (default: 30000) */
   timeout?: number;
+  /** Command names whose payloads should be redacted in logs */
+  redact?: string[];
 }
 
 // =============================================================================
@@ -40,15 +46,32 @@ interface RequestOptions {
 }
 
 // =============================================================================
+// HELPERS
+// =============================================================================
+
+const MAX_HISTORY = 50;
+
+function formatTime(): string {
+  const d = new Date();
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  const ms = String(d.getMilliseconds()).padStart(3, '0');
+  return `${h}:${m}:${s}.${ms}`;
+}
+
+// =============================================================================
 // BRIDGY LITE CLASS
 // =============================================================================
 
 export class BridgyLite {
   private readonly role: 'parent' | 'child';
   private readonly origins: string[];
-  private readonly debug: boolean;
+  private readonly label: string;
   private readonly timeout: number;
+  private readonly redactCommands: Set<string>;
 
+  private debugEnabled: boolean;
   private connected = false;
   private targetWindow: Window | null = null;
   private targetOrigin: string | null = null;
@@ -61,13 +84,27 @@ export class BridgyLite {
     { resolve: Function; reject: Function; timer: ReturnType<typeof setTimeout> }
   >();
 
+  // History buffer — always records, even when debug is off
+  private readonly history: LogEntry[] = [];
+
   constructor(config: BridgyLiteConfig) {
     this.role = config.role;
     this.origins = config.origins;
-    this.debug = config.debug ?? false;
+    this.label = config.label ?? 'Bridgy';
     this.timeout = config.timeout ?? 30000;
+    this.redactCommands = new Set(config.redact ?? []);
 
-    this.log('info', 'BridgyLite initialized', { role: this.role });
+    // Debug: explicit config > localStorage seed
+    this.debugEnabled = config.debug ?? BridgyLog._shouldAutoEnable(this.label);
+
+    // Register with BridgyLog for runtime toggle
+    BridgyLog._register(this.label, {
+      enable: () => { this.debugEnabled = true; },
+      disable: () => { this.debugEnabled = false; },
+      getHistory: () => this.history,
+    });
+
+    this.record('✓', 'Initialized', { role: this.role });
   }
 
   // ===========================================================================
@@ -77,7 +114,7 @@ export class BridgyLite {
   /** Connect to the other side (immediate, no handshake) */
   connect(): void {
     if (this.connected) {
-      this.log('warn', 'Already connected');
+      this.record('⚠', 'Already connected');
       return;
     }
 
@@ -93,7 +130,7 @@ export class BridgyLite {
 
     this.listen();
     this.connected = true;
-    this.log('info', 'Connected');
+    this.record('✓', 'Connected');
   }
 
   /** Check if connected */
@@ -107,18 +144,9 @@ export class BridgyLite {
 
   private listen(): void {
     this.messageHandler = (event: MessageEvent) => {
-      // Log all messages in debug mode
-      if (this.debug) {
-        this.log('recv', 'MESSAGE', {
-          origin: event.origin,
-          hasCommand: !!(event.data?.command || event.data?.type || event.data?.event),
-          isBridgy: event.data?.__bridgy === true,
-        });
-      }
-
       // Validate origin
       if (!this.isValidOrigin(event.origin)) {
-        this.log('recv', 'BLOCKED_ORIGIN', { origin: event.origin, allowed: this.origins });
+        this.record('✗', 'BLOCKED_ORIGIN', { origin: event.origin });
         return;
       }
 
@@ -134,13 +162,10 @@ export class BridgyLite {
       const command = data?.command || data?.type || data?.event;
       if (command && typeof command === 'string') {
         const handlers = this.eventHandlers.get(command);
-        this.log('recv', 'RAW', { command, hasHandler: !!handlers, handlerCount: handlers?.size || 0 });
+        this.record('↓', `RAW ${command}`, this.safePayload(command, data));
         handlers?.forEach(h => h(data, event));
         return;
       }
-
-      // No command found - ignore message
-      this.log('recv', 'NO_COMMAND', { data });
     };
 
     window.addEventListener('message', this.messageHandler);
@@ -171,25 +196,24 @@ export class BridgyLite {
     if (this.role === 'parent' && !this.targetWindow) {
       this.targetWindow = event.source as Window;
       this.targetOrigin = event.origin;
-      this.log('info', 'Parent target window set', { origin: event.origin });
+      this.record('✓', 'Target set', { origin: event.origin });
     }
 
     // Handle DATA packets (events)
     if (packet.type === 'DATA' && packet.command) {
-      const handlers = this.eventHandlers.get(packet.command);
-      this.log('recv', 'DATA', { command: packet.command, hasHandler: !!handlers, handlerCount: handlers?.size || 0 });
-      handlers?.forEach(h => h(packet.payload, event));
+      this.record('↓', `DATA ${packet.command}`, this.safePayload(packet.command, packet.payload), packet.id);
+      this.eventHandlers.get(packet.command)?.forEach(h => h(packet.payload, event));
     }
 
     // Handle REQUEST packets
     if (packet.type === 'REQUEST' && packet.command) {
-      this.log('recv', 'REQUEST', { command: packet.command });
+      this.record('↓', `REQUEST ${packet.command}`, this.safePayload(packet.command, packet.payload), packet.id);
       this.handleRequest(packet, event);
     }
 
     // Handle RESPONSE packets
     if (packet.type === 'RESPONSE' && packet.replyTo) {
-      this.log('recv', 'RESPONSE', { replyTo: packet.replyTo });
+      this.record('↓', `RESPONSE`, this.safePayload(undefined, packet.payload), packet.replyTo);
       const pending = this.pendingRequests.get(packet.replyTo);
       if (pending) {
         clearTimeout(pending.timer);
@@ -203,7 +227,7 @@ export class BridgyLite {
     const handler = this.requestHandlers.get(packet.command!);
 
     if (!packet.id) {
-      this.log('error', 'Request packet missing ID');
+      this.record('✗', 'Request missing ID');
       return;
     }
 
@@ -234,11 +258,10 @@ export class BridgyLite {
 
   private sendPacket(packet: LitePacket): void {
     if (!this.targetWindow) {
-      this.log('error', 'No target window');
+      this.record('✗', 'No target window');
       return;
     }
 
-    this.log('send', packet.type || 'PACKET', { command: packet.command });
     this.targetWindow.postMessage(packet, this.targetOrigin || '*');
   }
 
@@ -248,10 +271,12 @@ export class BridgyLite {
 
   /** Send fire-and-forget event */
   send<T>(command: string, payload?: T): void {
+    const id = makeId('data');
+    this.record('↑', `DATA ${command}`, this.safePayload(command, payload), id);
     this.sendPacket({
       __bridgy: true,
       type: 'DATA',
-      id: makeId('data'),
+      id,
       timestamp: Date.now(),
       command,
       payload,
@@ -263,7 +288,6 @@ export class BridgyLite {
     const set = this.eventHandlers.get(command) ?? new Set();
     set.add(handler as EventHandler);
     this.eventHandlers.set(command, set);
-    this.log('info', 'Handler registered', { command, type: 'event' });
   }
 
   /** Unsubscribe from events */
@@ -287,12 +311,12 @@ export class BridgyLite {
 
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
-        this.log('error', 'REQUEST_TIMEOUT', { command, timeout, id });
+        this.record('✗', `TIMEOUT ${command}`, { timeout }, id);
         reject(new Error(`Timeout: ${command} (${timeout}ms)`));
       }, timeout);
 
       this.pendingRequests.set(id, { resolve, reject, timer });
-      this.log('send', 'REQUEST', { command, id, timeout });
+      this.record('↑', `REQUEST ${command}`, this.safePayload(command, payload), id);
       this.sendPacket({
         __bridgy: true,
         type: 'REQUEST',
@@ -307,7 +331,6 @@ export class BridgyLite {
   /** Register request handler */
   handle<TReq, TRes>(command: string, handler: RequestHandler<TReq, TRes>): void {
     this.requestHandlers.set(command, handler as RequestHandler);
-    this.log('info', 'Handler registered', { command, type: 'request' });
   }
 
   /** Cleanup and destroy */
@@ -328,26 +351,46 @@ export class BridgyLite {
 
     this.connected = false;
     this.targetWindow = null;
-    this.log('info', 'Destroyed');
+
+    BridgyLog._unregister(this.label);
+    this.record('✓', 'Destroyed');
   }
 
   // ===========================================================================
   // LOGGING
   // ===========================================================================
 
-  private log(direction: string, type: string, data?: Record<string, unknown>): void {
-    if (!this.debug && direction !== 'error' && direction !== 'warn' && direction !== 'info') {
-      return;
+  /** Redact payload for sensitive commands */
+  private safePayload(command: string | undefined, payload: unknown): unknown {
+    if (command && this.redactCommands.has(command)) {
+      return '[REDACTED]';
+    }
+    return payload;
+  }
+
+  /**
+   * Record a log entry. Always buffers to history.
+   * Only prints to console when debug is enabled.
+   */
+  private record(icon: string, message: string, detail?: unknown, id?: string): void {
+    const time = formatTime();
+    const idPart = id ? ` (${id})` : '';
+    const line = `[${this.label} ${icon}] ${message}${idPart} ${time}`;
+
+    // Always buffer to history (circular, max 50)
+    const entry: LogEntry = { label: this.label, line, detail, ts: Date.now() };
+    this.history.push(entry);
+    if (this.history.length > MAX_HISTORY) {
+      this.history.shift();
     }
 
-    const arrow = direction === 'send' ? '→' : direction === 'recv' ? '←' : '';
-    const prefix = `[BridgyLite]:${this.role}`;
-    const message = arrow ? `${prefix} ${arrow} ${type}` : `${prefix} ${type}`;
+    // Only print when debug is on
+    if (!this.debugEnabled) return;
 
-    if (data && Object.keys(data).length > 0) {
-      console.log(message, data);
+    if (detail !== undefined && detail !== null) {
+      console.log(line, detail);
     } else {
-      console.log(message);
+      console.log(line);
     }
   }
 }

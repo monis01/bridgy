@@ -18,9 +18,9 @@ export default defineConfig([
     minify: true,
     sourcemap: true,
   },
-  // BridgyLite (IIFE for CDN)
+  // BridgyLite (IIFE for CDN) — includes BridgyLog on window
   {
-    entry: { 'bridgy-lite': 'src/lite-bridge.ts' },
+    entry: { 'bridgy-lite': 'src/lite-entry.ts' },
     format: ['iife'],
     globalName: 'BridgerLite',
     minify: true,
