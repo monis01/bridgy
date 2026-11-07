@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="logo.svg" alt="Bridgy Logo" width="400"/>
+  <img src="logo.svg" alt="Bridgy — secure iframe messaging" width="520"/>
 </p>
-
-<h1 align="center">Bridgy</h1>
 
 <p align="center">
   Lightweight, secure iframe communication library for cross-origin messaging.
@@ -10,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Bridgy-7.9kb-blue" alt="Bridgy Size"/>
-  <img src="https://img.shields.io/badge/BridgyLite-5.0kb-green" alt="BridgyLite Size"/>
+  <img src="https://img.shields.io/badge/BridgyLite-6.6kb-green" alt="BridgyLite Size"/>
   <img src="https://img.shields.io/badge/typescript-ready-brightgreen" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License"/>
 </p>
