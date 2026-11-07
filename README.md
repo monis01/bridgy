@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.svg" alt="Bridgy — secure iframe messaging" width="520"/>
+  <img src="https://cdn.jsdelivr.net/gh/monis01/bridgy@main/logo.svg" alt="Bridgy — secure iframe messaging" width="520"/>
 </p>
 
 <p align="center">
