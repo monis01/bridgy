@@ -1,0 +1,50 @@
+name: Release PR (development → main)
+
+# Whenever something lands on development, make sure there is an open
+# pull request from development into main. If one already exists, GitHub
+# updates it automatically with the new commits, so we only create it once.
+#
+# One-time repo setting required:
+#   Settings → Actions → General → Workflow permissions →
+#   "Allow GitHub Actions to create and approve pull requests"
+
+on:
+  push:
+    branches:
+      - development
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  open-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open PR if none exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Nothing to release if main already contains development.
+          ahead=$(gh api "repos/$REPO/compare/main...development" --jq '.ahead_by')
+          if [ "$ahead" = "0" ]; then
+            echo "main is up to date with development; nothing to do."
+            exit 0
+          fi
+
+          existing=$(gh pr list --repo "$REPO" --base main --head development --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "Release PR #$existing already open; it now includes the latest commits."
+            exit 0
+          fi
+
+          gh pr create --repo "$REPO" \
+            --base main \
+            --head development \
+            --title "Release: development → main" \
+            --body "Automated release PR. It stays open and picks up every new commit merged into \`development\`. Merge it when you are ready to ship to production (\`main\`)."
