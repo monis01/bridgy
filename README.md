@@ -24,13 +24,13 @@ Choose the version that fits your needs:
 | Version | Size | Use When |
 |---------|------|----------|
 | **Bridgy** (Full) | 7.9 KB | Need handshake, retries, message queueing |
-| **BridgyLite** | 5.0 KB | Simple request/response + events (37% smaller!) |
+| **BridgyLite** | 6.6 KB | Simple request/response + events + runtime debug logging |
 
 ### Quick Comparison
 
 | Feature | Bridgy | BridgyLite |
 |---------|--------|------------|
-| **Size (minified)** | 7.9 KB | 5.0 KB ✅ |
+| **Size (minified)** | 7.9 KB | 6.6 KB ✅ |
 | **Request/Response** | ✅ | ✅ |
 | **Events (send/on)** | ✅ | ✅ |
 | **Origin Validation** | ✅ | ✅ |
@@ -59,7 +59,7 @@ Choose the version you need:
 <!-- Full Bridgy (7.9 KB) - With handshake, retries, queueing -->
 <script src="https://unpkg.com/@monis01/iframe-bridge/dist/bridgy.global.js"></script>
 
-<!-- OR BridgyLite (5.0 KB) - Lightweight, instant connection -->
+<!-- OR BridgyLite (6.6 KB) - Lightweight, instant connection -->
 <script src="https://unpkg.com/@monis01/iframe-bridge/dist/bridgy-lite.global.js"></script>
 ```
 
@@ -75,7 +75,7 @@ Choose the version you need:
 - ✅ You want the smallest bundle size
 - ✅ Parent may or may not use Bridgy
 
-#### Child Application (5.0 KB)
+#### Child Application (6.6 KB)
 
 ```typescript
 import { BridgyLite } from '@monis01/iframe-bridge';
@@ -232,7 +232,7 @@ import { BridgyLite } from '@monis01/iframe-bridge';
 </script>
 ```
 
-#### BridgyLite (5.0 KB) ⭐ Recommended
+#### BridgyLite (6.6 KB) ⭐ Recommended
 ```html
 <script src="https://unpkg.com/@monis01/iframe-bridge/dist/bridgy-lite.global.js"></script>
 <script>
@@ -488,10 +488,10 @@ export function useBridge(config: BridgyLiteConfig) {
 
 | Format | File | Bridgy (Full) | BridgyLite |
 |--------|------|---------------|------------|
-| **IIFE (CDN)** | `*.global.js` | **7.9 KB** | **5.0 KB** ✅ |
-| **ESM (npm)** | `index.js` | 11.8 KB | - |
-| **CJS (npm)** | `index.cjs` | 12.3 KB | - |
-| **Types** | `index.d.ts` | 6.3 KB | - |
+| **IIFE (CDN)** | `*.global.js` | **7.9 KB** | **6.6 KB** ✅ |
+| **ESM (npm)** | `index.js` | 13.4 KB (both) | - |
+| **CJS (npm)** | `index.cjs` | 13.9 KB (both) | - |
+| **Types** | `index.d.ts` | 7.7 KB | - |
 
 **Note:** For npm, both versions are exported from the same package. Bundlers (webpack/vite) tree-shake unused code, so you only pay for what you import.
 
@@ -502,7 +502,7 @@ export function useBridge(config: BridgyLiteConfig) {
 ```
 dist/
 ├── bridgy.global.js           # Full Bridgy for CDN (7.9 KB)
-├── bridgy-lite.global.js      # BridgyLite for CDN (5.0 KB) ⭐
+├── bridgy-lite.global.js      # BridgyLite for CDN (6.6 KB) ⭐
 ├── index.js                   # ESM for npm (both versions)
 ├── index.cjs                  # CommonJS for npm (both versions)
 ├── index.d.ts                 # TypeScript types
@@ -512,6 +512,8 @@ src/
 ├── index.ts                   # Main exports (both versions)
 ├── bridge.ts                  # Full Bridgy class
 ├── lite-bridge.ts             # BridgyLite class
+├── lite-entry.ts              # CDN entry for BridgyLite (+ BridgyLog)
+├── bridgy-log.ts              # Runtime debug log controller
 ├── types.ts                   # TypeScript interfaces
 ├── constants.ts               # Default values
 ├── logger.ts                  # Debug logger
@@ -700,7 +702,6 @@ bridge.on<TokenResponse>('token-update', (data) => {
 
 Works in all modern browsers that support `postMessage`:
 - ✅ Chrome, Firefox, Safari, Edge (latest)
-- ✅ IE11 (with polyfills)
 
 ---
 
@@ -714,8 +715,3 @@ MIT
 
 Issues and pull requests are welcome at [github.com/monis01/bridgy](https://github.com/monis01/bridgy)
 
----
-
-## 📖 More Examples
-
-See the [examples](./examples) directory for complete working examples with different frameworks.

@@ -213,7 +213,7 @@ export class BridgyLite {
 
     // Handle RESPONSE packets
     if (packet.type === 'RESPONSE' && packet.replyTo) {
-      this.record('↓', `RESPONSE`, this.safePayload(undefined, packet.payload), packet.replyTo);
+      this.record('↓', 'RESPONSE', this.safePayload(undefined, packet.payload), packet.replyTo);
       const pending = this.pendingRequests.get(packet.replyTo);
       if (pending) {
         clearTimeout(pending.timer);
