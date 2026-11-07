@@ -27,7 +27,7 @@
     "lint:fix": "eslint src tests --fix",
     "test": "vitest",
     "test:e2e": "playwright test",
-    "build": "tsup src/index.ts --format cjs,esm,iife --global-name Bridger --dts --minify --sourcemap",
+    "build": "tsup",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
