@@ -126,7 +126,7 @@ export class BridgyLite {
       this.targetWindow = parent;
       this.targetOrigin = this.origins[0] || '*';
     }
-    // Parent: targetWindow set when iframe sends first message
+    // Parent: targetWindow follows incoming requests and events
 
     this.listen();
     this.connected = true;
@@ -192,8 +192,9 @@ export class BridgyLite {
   // ===========================================================================
 
   private handleBridgyPacket(packet: LitePacket, event: MessageEvent): void {
-    // Set target window for parent (from first message)
-    if (this.role === 'parent' && !this.targetWindow) {
+    // Follow the latest parent-side request or event sender, never a response.
+    if (this.role === 'parent' && event.source &&
+        (packet.type === 'REQUEST' || packet.type === 'DATA')) {
       this.targetWindow = event.source as Window;
       this.targetOrigin = event.origin;
       this.record('✓', 'Target set', { origin: event.origin });
@@ -224,6 +225,8 @@ export class BridgyLite {
   }
 
   private async handleRequest(packet: LitePacket, event: MessageEvent): Promise<void> {
+    const targetWindow = event.source as Window | null;
+    const targetOrigin = event.origin;
     const handler = this.requestHandlers.get(packet.command!);
 
     if (!packet.id) {
@@ -249,7 +252,8 @@ export class BridgyLite {
       }
     }
 
-    this.sendPacket(response);
+    // An asynchronous handler may finish after another frame becomes current.
+    targetWindow?.postMessage(response, targetOrigin);
   }
 
   // ===========================================================================
